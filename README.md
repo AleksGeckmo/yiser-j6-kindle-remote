@@ -114,35 +114,65 @@ The flash changes are 3 × 4 KB sectors (`0x02000`, `0x14000`, `0x15000`).
 
 ## 4. Getting into the bootloader (Raspberry Pi Pico / Pico 2)
 
-Jieli's ROM enters USB download mode when it receives the **USB_KEY** on the USB lines right after
-power-up: 16-bit `0x16EF`, MSB first, data latched on the clock's rising edge, ~25–50 kHz, repeated
-until the chip pulls both lines low. Sources disagree on which line is the clock, so
-`pico/pico_usb_key.py` sends **both orders alternately** — that worked first try.
+### The idea in one paragraph
 
-Wiring (battery **disconnected** — the Pico powers the chip so it can power-cycle it):
+The chip has a bootloader built into its ROM that can read and write the flash over USB. It only
+starts if, **in the first moments after the chip is powered on**, it sees a secret 16-bit
+"knock" (`0x16EF`, called the USB_KEY) on its USB D+/D− pins. You can't do that by hand, so a
+Raspberry Pi Pico does it: it switches the chip's power on and immediately sends the knock.
+If it works, Windows sees a new USB drive called **`BD19 UBOOT1.00`**.
+
+### Wiring
+
+Wires are soldered straight onto the remote's pads (freehand, with a 1–1.5 kΩ resistor in
+series in each data line). Only the **power** goes through the breadboard, so the power source can
+be swapped by moving a jumper — see the next part, it matters.
 
 ```
-Pico GP2 --[1k-1.5k]--+-- D+ pad (pin 12)
-Pico GP3 --[1k-1.5k]--+-- D- pad (pin 11)      cut USB cable: green -> D+, white -> D-,
-Pico GND -------------+-- GND (any ground pad)                black -> GND, RED UNUSED
-Pico GP6 ----------------- VBAT (B+ / VBAT pad)
+Pico GP2 ──[1k–1.5k]──┬── D+ pad (chip pin 12)
+Pico GP3 ──[1k–1.5k]──┼── D− pad (chip pin 11)    PC side: a cut USB cable
+Pico GND ─────────────┴── GND pad                  green → D+, white → D−, black → GND, red NOT connected
+
+Remote VBAT pad ── breadboard power rail ──┬── EITHER Pico GP6   (for the bootloader)
+                                           └── OR    the battery (for normal use / testing)
 ```
 
-<img src="images/pico_wiring.webp" width="420" alt="Remote board wired to a Pico through a breadboard with series resistors">
+<img src="images/pico_wiring.webp" width="420" alt="Remote board wired by hand to a Pico; the breadboard only carries power">
 
-*The real setup: wires soldered straight to the remote's pads, the series resistors on a
-breadboard, the Pico on the right, and a cut USB cable going to the PC.*
+*The real setup: everything wired freehand, the breadboard only carrying power, the Pico on the right,
+and a cut USB cable going to the PC.*
 
-Run (MicroPython, e.g. `mpremote exec "import pico_usb_key as k; k.enter()"`): GP6 power-cycles the
-chip, the key is sent for 150 ms, the lines are released, and the chip stays powered. Windows then
-shows **`BD19 UBOOT1.00 USB Device`** (USB `4C4A:3442`) as a 0-byte drive.
-**Never let Windows format it.**
+### Power: why you have to switch between GP6 and the battery
 
-Notes:
-* A Pico GPIO (~12 mA) is enough for the bootloader, **not** for the normal firmware (radio).
-  Run the normal firmware on the battery — but never connect the battery and GP6 at the same time.
-* Keep the Pico's data pins high-impedance when idle: driving them back-feeds the chip and stops it
-  from powering off cleanly.
+This was the most confusing part of the whole project, so here it is plainly:
+
+| You want to… | Power the remote from | Why |
+|---|---|---|
+| **Enter the bootloader** (backup / flash) | **Pico GP6** (battery unplugged) | The knock only works right after a real power-on. With the battery attached the chip never truly loses power — "off" via button 1 is only a sleep — so there's no fresh power-on to catch. GP6 lets the Pico cut power, switch it back on, and start knocking within microseconds, every time. |
+| **Run the firmware** (test buttons, Bluetooth) | **The battery** (GP6 unplugged) | A Pico pin gives ~3.3 V and only a few mA. That's enough for the tiny ROM bootloader, but the real firmware starts the Bluetooth radio, which needs more; on GP6 the remote simply never appears on Bluetooth. |
+| — | **Never both at once** | The battery (~3.7–4.2 V) would push current back into the Pico's 3.3 V pin, and the Pico could no longer power-cycle the chip anyway. |
+
+So a typical test cycle was: **GP6 → enter bootloader → flash → unplug GP6 → plug in battery →
+hold button 1 to switch on → test → unplug battery → back to GP6.**
+
+Also keep the Pico's D+/D− pins *released* (inputs, not driven) whenever it isn't knocking —
+driving them feeds a little power into the chip through the data pins and stops it switching off cleanly.
+
+### Running it
+
+With MicroPython on the Pico and `pico/pico_usb_key.py` copied to it:
+
+```bash
+mpremote exec "import pico_usb_key as k; k.enter()"
+```
+
+It powers the chip off and on via GP6, sends the knock for ~150 ms, releases the lines and leaves the
+chip powered. Within a couple of seconds Windows shows **`BD19 UBOOT1.00 USB Device`**
+(USB `4C4A:3442`) as an empty drive. **Never let Windows format it** — just ignore the prompt.
+
+Technical detail: the key is sent MSB first, latched on the clock's rising edge, ~25–50 kHz. Sources
+disagree on which USB line is the clock, so the script alternates **both orders**; that works,
+and which one the chip actually uses was never isolated.
 
 ## 5. Back up, patch, flash
 
@@ -204,6 +234,24 @@ switched on but were abandoned in favour of the data patch.
 * Windows keeps its own cached copy of the old descriptor (it keeps showing media keys) — re-pair
   there if you care.
 * The remote drops the Bluetooth link when idle; the first press after idle may only wake it.
+
+## What didn't work (so you can skip it)
+
+This took a lot of trial and error on real hardware. The main wrong turns:
+
+* **Remapping on the Kindle side.** Possible, but every button still arrived as the same touch event;
+  the clean fix was making the remote itself send keys.
+* **Testing firmware while powered from the Pico.** The firmware never showed up on Bluetooth and
+  looked "broken" — it just needed the battery (see the power table above).
+* **Thinking flashed firmware was dead.** Several builds seemed not to boot; really the remote was
+  simply **off** and needed button 1 held after power was connected.
+* **Building new firmware from Jieli's SDK.** It compiled and flashed, but was buggier than the
+  original. Patching the original firmware's data (this repo) was far simpler and kept all of
+  the vendor's power/charging/Bluetooth behaviour.
+* **Guessing the action→key mapping.** The first patch had Up acting as Left; each action code
+  had to be measured on the real remote with `pc/remote_logger.py`.
+* **KOReader ignoring the new keys.** Not a firmware problem — the plugin's "Handled by" setting
+  (section 7).
 
 ## 8. Tools in this repo
 

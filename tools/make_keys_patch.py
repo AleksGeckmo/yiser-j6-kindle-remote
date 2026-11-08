@@ -1,3 +1,4 @@
+# AI-written: this script was written by Anthropic's Claude (Claude Code). See README "AI disclosure".
 """Build the 'real keys' patch for the ORIGINAL Yiser-J6 firmware (data only).
 
 1) Rewrite the media-key descriptor (report id 3, 24 one-bit fields) at app.bin+0x12922 so each bit

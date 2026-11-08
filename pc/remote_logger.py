@@ -1,3 +1,4 @@
+# AI-written: this script was written by Anthropic's Claude (Claude Code). See README "AI disclosure".
 """Raw Input logger for the Yiser-J6 Bluetooth remote (or any HID device).
 
 No dependencies. Logs mouse, keyboard and HID (digitizer/consumer) events with

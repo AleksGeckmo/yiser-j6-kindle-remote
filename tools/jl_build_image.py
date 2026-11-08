@@ -1,3 +1,4 @@
+# AI-written: this script was written by Anthropic's Claude (Claude Code). See README "AI disclosure".
 """Build a flash image for the Yiser-J6 (JieLi BD19) from the ORIGINAL image + a new app.bin/cfg_tool.bin.
 
 usage: python jl_build_image.py <original_flash.bin> <chipkey hex> <app.bin> <cfg_tool.bin> <out_flash.bin> [p11_code.bin]

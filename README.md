@@ -1,5 +1,12 @@
 # Yiser-J6 ring remote → real keyboard keys (for a Kindle page turner)
 
+> [!IMPORTANT]
+> **AI disclosure:** AI (Anthropic's Claude, via Claude Code) was used throughout this entire
+> project. It did the research, reverse engineering, firmware analysis and patch design, and it
+> wrote the scripts, and this page itself. A human did the soldering, button pressing and testing
+> on real hardware, and directed and checked the work. The patch has been confirmed working on one
+> remote, but treat the explanations as AI-written: they may contain mistakes.
+
 The **Yiser-J6** is a cheap Bluetooth "TikTok scroller" ring remote. Out of the box it
 pretends to be a **touchscreen**: every button press is sent as a finger swipe or tap,
 so on Linux (and a jailbroken Kindle running
@@ -215,3 +222,13 @@ Python 3 + `crcmod` for the tools; MicroPython ≥1.22 on the Pico.
   and kindle-button-mapper.
 
 Reverse-engineered on hardware I own, for interoperability. Not affiliated with Yiser or Jieli.
+
+## AI disclosure
+
+This whole project was done with AI assistance: Anthropic's Claude (through Claude Code), working
+on my PC. It decoded the remote's inputs, researched the chip and its bootloader, wrote the
+Pico bootloader script and the firmware unpack/repack tools, worked out the firmware's button
+scripts and HID descriptors, designed the patch, and wrote everything in this repository,
+including this README. My part was the hardware work (opening the remote, soldering, wiring
+the Pico), pressing buttons during tests, testing on the Kindle, and deciding the direction.
+Every script in this repo is AI-written.

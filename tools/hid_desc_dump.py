@@ -1,3 +1,4 @@
+# AI-written: this script was written by Anthropic's Claude (Claude Code). See README "AI disclosure".
 """Find and pretty-print every HID report descriptor in the decrypted app.bin."""
 import sys
 

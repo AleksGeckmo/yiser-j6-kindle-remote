@@ -1,3 +1,4 @@
+# AI-written: this script was written by Anthropic's Claude (Claude Code). See README "AI disclosure".
 """Read-only: list what each HID collection of a paired Yiser-J6 (VID 05AC PID 0220) can report, via Windows hid.dll."""
 import ctypes, subprocess, json
 from ctypes import wintypes as w

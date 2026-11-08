@@ -1,3 +1,4 @@
+# AI-written: this script was written by Anthropic's Claude (Claude Code). See README "AI disclosure".
 """Unpack a JieLi "new firmware" (JLFS) flash image. Reimplemented from kagaimiq's docs/notes.
 
 usage: python jl_unpack.py <flash.bin> <chipkey hex> <outdir>

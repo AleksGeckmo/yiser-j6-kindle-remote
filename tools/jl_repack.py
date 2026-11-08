@@ -1,3 +1,4 @@
+# AI-written: this script was written by Anthropic's Claude (Claude Code). See README "AI disclosure".
 """Patch the decrypted app.bin inside a JieLi BD19 flash image and rebuild a valid, re-encrypted image.
 
 usage: python jl_repack.py <original_flash.bin> <chipkey hex> <patch.json> <out_flash.bin>

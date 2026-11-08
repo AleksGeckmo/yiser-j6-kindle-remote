@@ -1,3 +1,4 @@
+# AI-written: this script was written by Anthropic's Claude (Claude Code). See README "AI disclosure".
 # MicroPython for RP2350 (Pico 2 / clone). First-draft USB_KEY sender for a Jieli AC6323A.
 #
 # WIRING (all grounds common!):

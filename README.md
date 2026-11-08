@@ -19,11 +19,12 @@ to the original firmware that makes it send ordinary keyboard keys:
 
 | Button | Short press | Long press |
 |---|---|---|
-| Up / Down | Up / Down arrow | auto-repeat |
-| Left / Right | Left / Right arrow | same key |
-| Centre | Enter | Enter |
+| Up | Up arrow | Up arrow, repeating |
+| Down | Down arrow | Down arrow |
+| Left / Right | Left / Right arrow | Left / Right arrow |
+| Centre | Enter (double-press: Enter twice) | Enter |
 | Button 2 | Space | — |
-| Button 1 | power on/off (unchanged) | — |
+| Button 1 | — | hold to switch on/off (unchanged) |
 
 Nothing else changes: power handling, charging and Bluetooth are the vendor's own code.
 
@@ -33,9 +34,15 @@ Nothing else changes: power handling, charging and Bluetooth are the vendor's ow
 |---|---|
 | <img src="images/demo_page_turn.gif" width="380" alt="Turning Kindle pages with the patched ring remote"> | <img src="images/demo_kindle.gif" width="380" alt="The patched remote controlling KOReader on a Kindle"> |
 
-> **Do this only on hardware you own, and back up first.** Flashing can leave the remote
-> non-booting; the chip's ROM bootloader is always available to restore your backup, but you
-> need the wiring below to reach it. No firmware images are included here — you patch your own dump.
+> **Do this only on hardware you own, and back up first.** A bad flash can leave the remote
+> not starting. The chip's built-in bootloader still works then, so you can always write your
+> backup back, using the same wiring as below. No firmware files are included here: you read
+> your own remote's firmware and patch that.
+
+**What you need:** a Raspberry Pi Pico (or Pico 2) with MicroPython, a USB cable you can cut,
+two 1–1.5 kΩ resistors, a soldering iron (or another way to reach the test pads), and a Windows PC
+with Python 3. The steps are: open the remote → wire it up (section 4) → back up and patch (section 5)
+→ set up the Kindle (section 7).
 
 ---
 
@@ -47,8 +54,8 @@ Nothing else changes: power handling, charging and Bluetooth are the vendor's ow
 
 * SoC: **Jieli AC6323A** (QFN20), marked `BP3F034-23A4` — the `23A4` after the dash is the part
   (AC63**23A**, 4 Mbit flash). Jieli family **BD19 / AC632N**, CPU arch `q32s`.
-* 24 MHz crystal, PCB antenna, 40 mAh LiPo on pads `B+`/`B-`, USB-C (charge only — its data
-  pins are **not** connected to the chip).
+* 24 MHz crystal, PCB antenna, a small LiPo cell soldered to pads `B+`/`B-`, USB-C (charging only;
+  its data pins are **not** connected to the chip, so you can't flash through it).
 * Board silkscreen: `yiser-J6 V1.x`, `2023-05-30`.
 
 AC6323A pins that matter (pin 1 = VBAT; numbering continues counter-clockwise seen from the top):
@@ -56,13 +63,14 @@ AC6323A pins that matter (pin 1 = VBAT; numbering continues counter-clockwise se
 | Pin | Name | On this board |
 |---|---|---|
 | 1 | VBAT | battery +, also a round test pad (~4.1 V) |
-| 2 | LDOIN / PP0 | 5 V from USB-C (connector pad 5) + a test pad |
+| 2 | LDOIN / PP0 | 5 V from USB-C, also on a test pad (leave it unconnected) |
 | 3 | VDDIO | ~3 V rail |
-| 11 | USB0DM (D−) | **test pad** (bare, centre of the board) |
+| 11 | USB0DM (D−) | **test pad** |
 | 12 | USB0DP (D+) | **test pad** right next to the D− pad |
 | PB7, PA7, PA8, PA0, PA1, PA2, PA9 | GPIO | the 7 buttons (to GND); PA9 = button 1 / power |
 
-The D+/D− test pads + VBAT + GND are the factory programming points. You need them.
+You need four points: the **D+** and **D−** test pads, **VBAT** (the `B+` pad) and any **GND**. Before
+soldering, check which pad is which with a multimeter in continuity mode against the chip's pins.
 
 ## 2. How the stock firmware works
 
@@ -88,7 +96,7 @@ action 0x04..0x10 = set one media-key bit (report 3), 0x0C = release
 ```
 
 Slots: #0 down swipe, #1 up, #2 right, #3 left, #4 centre tap, #5 double-tap ("like"),
-#6–#10/#16 media keys, #11/#13–#15 button 2. The axes are flipped: "up" is Y rising.
+#6–#10/#16 media keys (long presses), #11/#13–#15 button 2.
 
 **Media-key descriptor** (report 3, 80 bytes at `app.bin+0x12922`): bit *n* of the 24-bit report
 is the *n*-th Usage in the descriptor. Measured action code → bit on this firmware:
@@ -114,9 +122,10 @@ keyboard collection (no touchscreen at all); it was not needed in practice and i
 
 The flash changes are 3 × 4 KB sectors (`0x02000`, `0x14000`, `0x15000`).
 
-> The action→bit table above is what this firmware version did. **Check yours** with
-> `pc/remote_logger.py` (press each button a different number of times so the log labels itself)
-> before trusting the patch on a different remote.
+> The offsets and the action→bit table above are from **this** remote's firmware. If yours differs
+> (the bytes at these offsets don't match what's described here), don't apply the patch blindly.
+> Measure first with `pc/remote_logger.py`: press each button a different number of times so the log
+> labels itself.
 
 ## 4. Getting into the bootloader (Raspberry Pi Pico / Pico 2)
 
@@ -136,13 +145,16 @@ data line. Make the remote's power easy to switch between the Pico and the batte
 jumper; the next part explains why.
 
 ```
-Pico GP2 ──[1k–1.5k]──┬── D+ pad (chip pin 12)
-Pico GP3 ──[1k–1.5k]──┼── D− pad (chip pin 11)    PC side: a cut USB cable
-Pico GND ─────────────┴── GND pad                  green → D+, white → D−, black → GND, red NOT connected
-
-Remote VBAT pad ── jumper / switch ──┬── EITHER Pico GP6   (for the bootloader)
-                                     └── OR    the battery (for normal use / testing)
+Remote pad          Pico                        Cut USB cable to the PC
+D+  (chip pin 12) ← GP2 through 1–1.5 kΩ   and  green wire
+D−  (chip pin 11) ← GP3 through 1–1.5 kΩ   and  white wire
+GND               ← GND                    and  black wire
+VBAT (B+)         ← GP6  OR  battery +   (via a jumper/switch; never both, see below)
+                                                (red 5 V wire: NOT connected)
 ```
+
+Each remote pad goes to *both* the Pico pin and the USB wire on its line. The Pico sends the
+knock, and then the PC talks to the bootloader over the same two data pads.
 
 <img src="images/pico_wiring.webp" width="420" alt="The setup used for this project: remote wired by hand to a Pico">
 
@@ -156,7 +168,7 @@ This was the most confusing part of the whole project, so here it is plainly:
 | You want to… | Power the remote from | Why |
 |---|---|---|
 | **Enter the bootloader** (backup / flash) | **Pico GP6** (battery unplugged) | The knock only works right after a real power-on. With the battery attached the chip never truly loses power — "off" via button 1 is only a sleep — so there's no fresh power-on to catch. GP6 lets the Pico cut power, switch it back on, and start knocking within microseconds, every time. |
-| **Run the firmware** (test buttons, Bluetooth) | **The battery** (GP6 unplugged) | A Pico pin gives ~3.3 V and only a few mA. That's enough for the tiny ROM bootloader, but the real firmware starts the Bluetooth radio, which needs more; on GP6 the remote simply never appears on Bluetooth. |
+| **Run the firmware** (test buttons, Bluetooth) | **The battery** (GP6 unplugged) | A Pico pin only gives 3.3 V and about 12 mA. That's enough for the small ROM bootloader, but on GP6 the real firmware never showed up on Bluetooth. The voltage is probably under its low-battery cutoff, or the Bluetooth radio needs more current. |
 | — | **Never both at once** | The battery (~3.7–4.2 V) would push current back into the Pico's 3.3 V pin, and the Pico could no longer power-cycle the chip anyway. |
 
 So a typical test cycle was: **GP6 → enter bootloader → flash → unplug GP6 → plug in battery →
@@ -167,7 +179,14 @@ driving them feeds a little power into the chip through the data pins and stops 
 
 ### Running it
 
-With MicroPython on the Pico and `pico/pico_usb_key.py` copied to it:
+Battery disconnected, GP6 connected. With MicroPython on the Pico, copy the script over once
+(`pip install mpremote` if you don't have it; Thonny works too):
+
+```bash
+mpremote cp pico/pico_usb_key.py :
+```
+
+Then run it:
 
 ```bash
 mpremote exec "import pico_usb_key as k; k.enter()"
@@ -175,7 +194,9 @@ mpremote exec "import pico_usb_key as k; k.enter()"
 
 It powers the chip off and on via GP6, sends the knock for ~150 ms, releases the lines and leaves the
 chip powered. Within a couple of seconds Windows shows **`BD19 UBOOT1.00 USB Device`**
-(USB `4C4A:3442`) as an empty drive. **Never let Windows format it** — just ignore the prompt.
+(USB `4C4A:3442`) as a new drive. **Never let Windows format it**: if it asks, click Cancel.
+If nothing appears, run `enter()` again. If it never appears, check the wiring.
+When you're finished, `k.power_off()` switches the chip off again.
 
 Technical detail: the key is sent MSB first, latched on the clock's rising edge, ~25–50 kHz. Sources
 disagree on which USB line is the clock, so the script alternates **both orders**; that works,
@@ -183,32 +204,76 @@ and which one the chip actually uses was never isolated.
 
 ## 5. Back up, patch, flash
 
-Use kagaimiq's [jl-uboot-tool](https://github.com/kagaimiq/jl-uboot-tool) (its BD19 loader works on
-this chip; the tool lists AC632N as "unknown"). On Windows run it from **PowerShell** — Git Bash
-mangles the `\\.\D:` device path. It prints the chip key and the flash ID (here SPI NOR `0xCD7113`,
-512 KB).
+Use kagaimiq's [jl-uboot-tool](https://github.com/kagaimiq/jl-uboot-tool) (download it and run
+`pip install -r requirements.txt` in its folder). On Windows, run it from **PowerShell**; Git Bash
+mangles the `\\.\D:` device path. Replace `D:` with the drive letter Windows gave the
+`BD19 UBOOT1.00` drive. When it connects, it prints the chip's details, including
+`>> Chip key: 0x…… <<`. **Write that number down**: you need it to decrypt the firmware. (This
+remote has a 512 KB SPI flash, ID `0xCD7113`.)
+
+The commands below assume the files they use are in the folder you run them from. Copy files between
+this repo's folder and the jl-uboot-tool folder as needed, or use full paths.
+
+**1. Back up the whole flash, twice.**
 
 ```powershell
-python jluboottool.py --device \\.\D: "read 0 0x80000 backup1.bin" exit
-# enter the bootloader again, read a second copy, and compare the two (they must be identical)
+python jluboottool.py --device \\.\D: "read 0 0x80000 backup1.bin"
 ```
 
-Patch your own backup and write only what changed:
+Run the `enter()` command on the Pico again, then repeat the command with `backup2.bin`. The two files must be identical:
+
+```powershell
+(Get-FileHash backup1.bin).Hash -eq (Get-FileHash backup2.bin).Hash
+```
+
+Keep both files safe: they're your only way back to the original firmware.
+
+**2. Patch your backup.** `<chipkey>` is the number from above, e.g. `0x1234`:
 
 ```bash
-python tools/jl_unpack.py backup1.bin <chipkey-hex> unpacked     # inspect / verify CRCs
-python tools/jl_repack.py backup1.bin <chipkey-hex> patches/yiser_j6_keys.json patched.bin
-#  -> prints the changed 4 KB sectors and writes patched.bin.sector_XXXXX.bin for each
+pip install crcmod
+python tools/jl_unpack.py backup1.bin <chipkey> unpacked
+python tools/jl_repack.py backup1.bin <chipkey> patches/yiser_j6_keys.json patched.bin
+```
+
+`jl_unpack.py` lists the firmware's parts. The `app_area_head` line must end in `crc=ok`; if it says
+`crc=BAD`, the chip key is wrong. (One last line with nonsense values and `crc=BAD` is normal: it's
+just the end of the list.) `jl_repack.py` prints every change it makes and writes one file per changed 4 KB block:
+`patched.bin.sector_02000.bin`, `patched.bin.sector_14000.bin` and `patched.bin.sector_15000.bin`.
+
+**3. Write only those three blocks** (the tool erases each block before writing it):
+
+```powershell
+python jluboottool.py --device \\.\D: "write 0x2000 patched.bin.sector_02000.bin" "write 0x14000 patched.bin.sector_14000.bin" "write 0x15000 patched.bin.sector_15000.bin"
+```
+
+**4. Check the write.** Read the three blocks back:
+
+```powershell
+python jluboottool.py --device \\.\D: "read 0x2000 0x1000 check_02000.bin" "read 0x14000 0x1000 check_14000.bin" "read 0x15000 0x1000 check_15000.bin"
+```
+
+Compare them with the files you wrote:
+
+```powershell
+foreach ($a in "02000","14000","15000") { (Get-FileHash "patched.bin.sector_$a.bin").Hash -eq (Get-FileHash "check_$a.bin").Hash }
+```
+
+All three lines must say `True`.
+
+**5. Switch to the battery.** Run `k.power_off()`, disconnect GP6, connect the battery, then
+**hold button 1 until the remote switches on.** Once power is connected, the remote stays off
+until you do this. That cost hours here: every "dead" firmware turned out to be simply switched off.
+
+**To undo the patch**, cut the same three blocks out of your backup and write them back the same way:
+
+```bash
+python -c "d=open('backup1.bin','rb').read(); [open('orig_%05X.bin' % a,'wb').write(d[a:a+0x1000]) for a in (0x2000,0x14000,0x15000)]"
 ```
 
 ```powershell
-python jluboottool.py --device \\.\D: "write 0x2000 patched.bin.sector_02000.bin" "write 0x14000 patched.bin.sector_14000.bin" "write 0x15000 patched.bin.sector_15000.bin" exit
+python jluboottool.py --device \\.\D: "write 0x2000 orig_02000.bin" "write 0x14000 orig_14000.bin" "write 0x15000 orig_15000.bin"
 ```
-
-Read the sectors back and compare before you trust them.
-
-**Then: after power is connected, the remote stays OFF until you hold button 1.**
-(That cost hours — every "dead firmware" before it was simply switched off.)
 
 ## 6. Firmware format notes (JLFS / "new firmware format")
 
@@ -220,27 +285,37 @@ Read the sectors back and compare before you trust them.
   scheme: ENC per 32-byte block with key `chipkey ^ ((addr - 0x2000) >> 2)`.
 * App area = `app_area_head` (offset field = entry point `0x1E00120`) containing `app.bin`,
   `cfg_tool.bin`, `VM`, `PRCT`, `BTIF`; followed — **unaligned, as the last entry (index 1)** —
-  by `p11_code.bin` (4 KB, low-power core code the app loads at boot). Miss it and nothing runs.
+  by `p11_code.bin` (code for the chip's low-power core, loaded at boot). Leave it out and nothing runs.
 * `app_area_head`'s data CRC covers everything after its header up to its `size`; the `app.bin`
   entry carries the CRC16 of `app.bin`. `jl_repack.py` recomputes all of it.
 * The bootloader (`uboot.boot`) is byte-identical to the one in Jieli's AC63 SDK
   (`cpu/bd19/tools/uboot.boot`), and the stock `cfg_tool.bin` is the SDK default.
 
-`tools/jl_build_image.py` drops a different `app.bin` into the original layout (it rebuilt the
-stock firmware byte-for-byte as a self-test). Custom SDK builds booted far enough to be
-switched on but were abandoned in favour of the data patch.
+`tools/jl_build_image.py` drops a different `app.bin` into the original layout (as a self-test it
+rebuilt the stock firmware byte-for-byte). It was used for custom SDK builds; those ran, but were
+abandoned in favour of the data patch. You don't need it for the patch.
 
 ## 7. Kindle / KOReader setup
 
-* After flashing, the host must re-read the descriptor: in KOReader → Settings → Network →
-  **BT Manager – HID Passthrough → Debug → Clear descriptor cache**, then reconnect the remote
-  (or delete `kindle_hid_passthrough/cache/<remote address>.json` — **not** `pairing_keys.json`).
-* In **Key mappings → Yiser-J6**, set **"Handled by: Button Mapper, exclusive"** and bind the keys.
-  With the default "Automatic", KOReader grabs the now keyboard-like remote and applies its own
-  defaults instead of your bindings.
-* Windows keeps its own cached copy of the old descriptor (it keeps showing media keys) — re-pair
-  there if you care.
-* The remote drops the Bluetooth link when idle; the first press after idle may only wake it.
+This assumes [kindle-hid-passthrough](https://github.com/zampierilucas/kindle-hid-passthrough) is
+already installed and working, with its KOReader plugin and the Button Mapper. The plugin's menu is
+in KOReader under **Settings (gear icon) → Network → BT Manager - HID Passthrough**.
+
+1. **Only if this remote was already connected to the Kindle *before* you flashed it:** the Kindle
+   remembers the old button layout and keeps treating the remote as a touchscreen. Clear it with
+   **Debug → Clear descriptor cache**, then reconnect the remote. (Or delete
+   `/mnt/us/kindle_hid_passthrough/cache/<remote address>.json`, but **not** `pairing_keys.json`.)
+   If you're connecting the remote for the first time, skip this step.
+2. Pair and connect the remote as usual (**Scan for devices**).
+3. Open **Key mappings**, pick the remote, and set **"Handled by: Button Mapper, exclusive"**.
+   Then map the buttons to the actions you want. With the default "Automatic", KOReader takes over the
+   remote (it now looks like a keyboard) and uses its own default keys instead of your mappings.
+
+Good to know:
+* A PC that was paired with the remote before flashing has the same problem: Windows keeps the old
+  layout (it still shows media keys) until you remove the remote and pair it again.
+* The remote drops the Bluetooth connection when idle. The first press after a pause may only wake
+  it up, so press again.
 
 ## What didn't work (so you can skip it)
 
@@ -257,7 +332,7 @@ This took a lot of trial and error on real hardware. The main wrong turns:
   the vendor's power/charging/Bluetooth behaviour.
 * **Guessing the action→key mapping.** The first patch had Up acting as Left; each action code
   had to be measured on the real remote with `pc/remote_logger.py`.
-* **KOReader ignoring the new keys.** Not a firmware problem — the plugin's "Handled by" setting
+* **KOReader ignoring the new keys.** Not a firmware problem: it was the plugin's "Handled by" setting
   (section 7).
 
 ## 8. Tools in this repo
@@ -269,21 +344,21 @@ This took a lot of trial and error on real hardware. The main wrong turns:
 | `tools/make_keys_patch.py` | generates `patches/*.json` |
 | `tools/hid_desc_dump.py` | pretty-print HID descriptors found in `app.bin` |
 | `tools/jl_build_image.py` | put a different `app.bin` into the original layout (adds `p11_code.bin`, can move VM) |
-| `pico/pico_usb_key.py` | MicroPython: USB_KEY bootloader entry, power cycling, line listener, PIO UART capture |
+| `pico/pico_usb_key.py` | MicroPython: bootloader entry (`enter()`), `power_off()`, plus debugging experiments |
 | `pc/remote_logger.py` | Windows Raw Input logger (mouse/keyboard/HID reports with device IDs) |
 | `pc/hid_caps.py` | what Windows thinks each HID collection of the remote can report |
 
-Python 3 + `crcmod` for the tools; MicroPython ≥1.22 on the Pico.
+The tools need Python 3 and `crcmod` (`pip install crcmod`). The `pc/` scripts are Windows-only.
 
 ## Credits
 
-* **kagaimiq** — [jielie](https://kagaimiq.github.io/jielie/) docs (USB_KEY, chip markings,
+* **kagaimiq**: [jielie](https://kagaimiq.github.io/jielie/) docs (USB_KEY, chip markings,
   JLFS, ciphers) and [jl-uboot-tool](https://github.com/kagaimiq/jl-uboot-tool) (MIT); the cipher
   routines here are reimplemented from that work.
-* **Jieli** — the public [AC63 Bluetooth SDK](https://github.com/Jieli-Tech/fw-AC63_BT_SDK)
-  (the `keypage` example and the AC6323A datasheet explain most of the firmware).
-* **zampierilucas** — [kindle-hid-passthrough](https://github.com/zampierilucas/kindle-hid-passthrough)
-  and kindle-button-mapper.
+* **Jieli**: the public [AC63 Bluetooth SDK](https://github.com/Jieli-Tech/fw-AC63_BT_SDK);
+  its `keypage` example explains most of the firmware.
+* **zampierilucas**: [kindle-hid-passthrough](https://github.com/zampierilucas/kindle-hid-passthrough)
+  and [kindle-button-mapper-rs](https://github.com/zampierilucas/kindle-button-mapper-rs).
 
 Reverse-engineered on hardware I own, for interoperability. Not affiliated with Yiser or Jieli.
 

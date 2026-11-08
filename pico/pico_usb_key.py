@@ -1,22 +1,24 @@
 # AI-written: this script was written by Anthropic's Claude (Claude Code). See README "AI disclosure".
-# MicroPython for RP2350 (Pico 2 / clone). First-draft USB_KEY sender for a Jieli AC6323A.
+# MicroPython for the Raspberry Pi Pico / Pico 2. Puts a Jieli AC6323A (Yiser-J6 remote) into its
+# USB bootloader ("BD19 UBOOT1.00") by sending the USB_KEY right after power-up. See the README.
 #
-# WIRING (all grounds common!):
-#   Pico GND  -> board ground pad (yellow)
-#   Pico GP2  -> 1 kohm -> D+ test pad (pad left of the purple pad; chip pin 12)
-#   Pico GP3  -> 1 kohm -> D- test pad (purple pad; chip pin 11)
-#   Optional: 4.7 kohm from each of GP2/GP3 (Pico side) up to Pico 3V3 (see doc: idle line should read high)
-#   Chip power: EITHER the battery, OR Pico 3V3 -> VBAT pad (pink) with the battery lead disconnected. Never both.
-#   Do NOT connect the Pico 3V3 to anything else, and leave the board's VBUS (red) pad unconnected for now.
+# WIRING (all grounds common):
+#   Pico GND -> remote GND pad
+#   Pico GP2 -> 1-1.5 kohm -> remote D+ test pad (chip pin 12)
+#   Pico GP3 -> 1-1.5 kohm -> remote D- test pad (chip pin 11)
+#   Pico GP6 -> remote VBAT (B+) - ONLY while the battery is disconnected. Never both at once.
+#   Also connect the PC's USB cable to the same D+ / D- / GND pads (red 5 V wire NOT connected).
 #
-# USAGE (in Thonny or mpremote):
-#   listen()   - drives nothing; prints every change on D+/D- for 15 s (power-cycle the chip while it runs)
-#   run()      - repeatedly sends the key; prints ACK if both lines get pulled low by the chip.
-#                Start run(), THEN power the chip (connect VBAT jumper) so the key is present at boot.
+# USAGE (Thonny, or: mpremote exec "import pico_usb_key as k; k.enter()"):
+#   enter()      - power-cycle the chip from GP6, send the key, leave it powered -> bootloader drive appears
+#   power_off()  - release the lines and switch GP6 off
+#   listen()     - print every change on D+/D- for 15 s (debugging)
+#   The other functions (attempts, timed, auto, power_test, uart_capture, debug_boot) are
+#   experiments kept from development.
 #
-# Protocol as documented at kagaimiq.github.io/jielie/isp/usb/usb-key.html (for AC696N, unverified on AC6323A):
-#   16-bit key 0x16EF, MSB first, data on D-, clock on D+, chip latches on D+ rising edge, ~50 kHz,
-#   repeat until the chip pulls both D+ and D- low for 1-2 ms.
+# Protocol (kagaimiq.github.io/jielie/isp/usb/usb-key.html): 16-bit key 0x16EF, MSB first, ~50 kHz,
+# repeated until the chip pulls both D+ and D- low. Docs disagree on which line is the clock, so
+# enter() sends both orders alternately.
 
 from machine import Pin
 import time

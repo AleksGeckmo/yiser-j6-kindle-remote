@@ -130,23 +130,24 @@ If it works, Windows sees a new USB drive called **`BD19 UBOOT1.00`**.
 
 ### Wiring
 
-Wires are soldered straight onto the remote's pads (freehand, with a 1–1.5 kΩ resistor in
-series in each data line). Only the **power** goes through the breadboard, so the power source can
-be swapped by moving a jumper — see the next part, it matters.
+You need four connections to the remote: D+, D−, GND and VBAT. How you build them is up to you
+(soldered wires, pogo pins, a breadboard, a proper jig). Put a 1–1.5 kΩ resistor in series in each
+data line. Make the remote's power easy to switch between the Pico and the battery, for example with a
+jumper; the next part explains why.
 
 ```
 Pico GP2 ──[1k–1.5k]──┬── D+ pad (chip pin 12)
 Pico GP3 ──[1k–1.5k]──┼── D− pad (chip pin 11)    PC side: a cut USB cable
 Pico GND ─────────────┴── GND pad                  green → D+, white → D−, black → GND, red NOT connected
 
-Remote VBAT pad ── breadboard power rail ──┬── EITHER Pico GP6   (for the bootloader)
-                                           └── OR    the battery (for normal use / testing)
+Remote VBAT pad ── jumper / switch ──┬── EITHER Pico GP6   (for the bootloader)
+                                     └── OR    the battery (for normal use / testing)
 ```
 
-<img src="images/pico_wiring.webp" width="420" alt="Remote board wired by hand to a Pico; the breadboard only carries power">
+<img src="images/pico_wiring.webp" width="420" alt="The setup used for this project: remote wired by hand to a Pico">
 
-*The real setup: everything wired freehand, the breadboard only carrying power, the Pico on the right,
-and a cut USB cable going to the PC.*
+*The setup used for this project, which is one quick way to do it: the remote's pads wired by hand,
+a breadboard used only for switching power, the Pico on the right, and a cut USB cable going to the PC.*
 
 ### Power: why you have to switch between GP6 and the battery
 

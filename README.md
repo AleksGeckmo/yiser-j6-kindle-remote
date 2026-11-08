@@ -35,6 +35,10 @@ Nothing else changes: power handling, charging and Bluetooth are the vendor's ow
 
 ## 1. Hardware
 
+| Front: 7 buttons, Jieli chip, 24 MHz crystal, PCB antenna, round test pads | Back: USB-C (charge only) and the LiPo on `B+`/`B-` |
+|---|---|
+| <img src="images/board_front.webp" width="360" alt="Yiser-J6 board, front"> | <img src="images/board_back.webp" width="360" alt="Yiser-J6 board, back"> |
+
 * SoC: **Jieli AC6323A** (QFN20), marked `BP3F034-23A4` — the `23A4` after the dash is the part
   (AC63**23A**, 4 Mbit flash). Jieli family **BD19 / AC632N**, CPU arch `q32s`.
 * 24 MHz crystal, PCB antenna, 40 mAh LiPo on pads `B+`/`B-`, USB-C (charge only — its data
@@ -123,6 +127,11 @@ Pico GP3 --[1k-1.5k]--+-- D- pad (pin 11)      cut USB cable: green -> D+, white
 Pico GND -------------+-- GND (any ground pad)                black -> GND, RED UNUSED
 Pico GP6 ----------------- VBAT (B+ / VBAT pad)
 ```
+
+<img src="images/pico_wiring.webp" width="420" alt="Remote board wired to a Pico through a breadboard with series resistors">
+
+*The real setup: wires soldered straight to the remote's pads, the series resistors on a
+breadboard, the Pico on the right, and a cut USB cable going to the PC.*
 
 Run (MicroPython, e.g. `mpremote exec "import pico_usb_key as k; k.enter()"`): GP6 power-cycles the
 chip, the key is sent for 150 ms, the lines are released, and the chip stays powered. Windows then

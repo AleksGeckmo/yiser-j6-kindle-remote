@@ -69,8 +69,13 @@ AC6323A pins that matter (pin 1 = VBAT; numbering continues counter-clockwise se
 | 12 | USB0DP (D+) | **test pad** right next to the D− pad |
 | PB7, PA7, PA8, PA0, PA1, PA2, PA9 | GPIO | the 7 buttons (to GND); PA9 = button 1 / power |
 
-You need four points: the **D+** and **D−** test pads, **VBAT** (the `B+` pad) and any **GND**. Before
-soldering, check which pad is which with a multimeter in continuity mode against the chip's pins.
+You need four points: the **D+** and **D−** test pads, **VBAT** and any **GND**:
+
+<img src="images/pad_diagram.png" width="760" alt="Front of the Yiser-J6 board with the VBAT, D+, D-, GND and 5 V test pads marked">
+
+These positions were found with a multimeter on one board (`yiser-J6 V1.x`). Other board revisions
+may differ, so before soldering, check each pad with a multimeter in continuity mode against the
+chip's pins.
 
 ## 2. How the stock firmware works
 

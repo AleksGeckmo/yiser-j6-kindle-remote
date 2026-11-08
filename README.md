@@ -27,6 +27,12 @@ to the original firmware that makes it send ordinary keyboard keys:
 
 Nothing else changes: power handling, charging and Bluetooth are the vendor's own code.
 
+**It working on a jailbroken Kindle (KOReader + kindle-hid-passthrough):**
+
+| | |
+|---|---|
+| <img src="images/demo_page_turn.gif" width="380" alt="Turning Kindle pages with the patched ring remote"> | <img src="images/demo_kindle.gif" width="380" alt="The patched remote controlling KOReader on a Kindle"> |
+
 > **Do this only on hardware you own, and back up first.** Flashing can leave the remote
 > non-booting; the chip's ROM bootloader is always available to restore your backup, but you
 > need the wiring below to reach it. No firmware images are included here — you patch your own dump.

@@ -1,0 +1,7 @@
+# Never commit firmware dumps or images (vendor code, device-specific data)
+*.bin
+*.ufw
+*.fw
+remote_log*.txt
+__pycache__/
+unpacked/

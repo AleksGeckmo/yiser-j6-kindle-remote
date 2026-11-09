@@ -41,7 +41,7 @@ def parse_entry(raw32):
     hcrc, dcrc, off, size, flags, resvd, index, name = ENTRY.unpack(raw32)
     ok = crc16(raw32[2:]) == hcrc
     return dict(hcrc=hcrc, dcrc=dcrc, off=off, size=size, flags=flags, index=index,
-                name=name.split(b'\0')[0].decode('latin1'), crc_ok=ok)
+                name=''.join(chr(c) if 32 <= c < 127 else '?' for c in name.split(b'\0')[0]), crc_ok=ok)
 
 
 def main():
@@ -126,7 +126,9 @@ def main():
         if e['index'] or e['size'] in (0, 0xFFFFFFFF):
             break
         off += e['size']
-        off = (off + 31) & ~31
+        # the next entry (e.g. the trailing p11_code.bin) may follow unaligned; else try 32-byte alignment
+        if not parse_entry(bytes(dec[off:off + 32]))['crc_ok']:
+            off = (off + 31) & ~31
 
 
 if __name__ == '__main__':

@@ -32,7 +32,7 @@ to the original firmware that makes it send ordinary keyboard keys:
 | Up | Up arrow | Up arrow, repeating |
 | Down | Down arrow | Down arrow |
 | Left / Right | Left / Right arrow | Left / Right arrow |
-| Centre | Enter (double-press: Enter twice) | Enter |
+| Centre | Enter | Enter |
 | Button 2 | Space | — |
 | Button 1 | — | hold to switch on/off (unchanged) |
 
@@ -49,7 +49,7 @@ Nothing else changes: power handling, charging and Bluetooth are the vendor's ow
 > backup back, using the same wiring as below. No firmware files are included here: you read
 > your own remote's firmware and patch that.
 
-**What you need:** a Raspberry Pi Pico (or Pico 2) with MicroPython, a USB cable you can cut,
+**What you need:** a Raspberry Pi Pico 2 (or another RP2350 board) with MicroPython, a USB cable you can cut,
 two 1–1.5 kΩ resistors, a soldering iron (or another way to reach the test pads), and a Windows PC
 with Python 3. The steps are: open the remote → wire it up (section 4) → back up and patch (section 5)
 → set up the Kindle (section 7).
@@ -62,8 +62,8 @@ with Python 3. The steps are: open the remote → wire it up (section 4) → bac
 |---|---|
 | <img src="images/board_front.webp" width="360" alt="Yiser-J6 board, front"> | <img src="images/board_back.webp" width="360" alt="Yiser-J6 board, back"> |
 
-* SoC: **Jieli AC6323A** (QFN20), marked `BP3F034-23A4` — the `23A4` after the dash is the part
-  (AC63**23A**, 4 Mbit flash). Jieli family **BD19 / AC632N**, CPU arch `q32s`.
+* SoC: **Jieli AC6323A** (QFN20, 4 Mbit = 512 KB flash), marked `BP3F034-23A4`. Jieli family
+  **BD19 / AC632N**, CPU arch `q32s`.
 * 24 MHz crystal, PCB antenna, a small LiPo cell soldered to pads `B+`/`B-`, USB-C (charging only;
   its data pins are **not** connected to the chip, so you can't flash through it).
 * Board silkscreen: `yiser-J6 V1.x`, `2023-05-30`.
@@ -74,7 +74,7 @@ AC6323A pins that matter (pin 1 = VBAT; numbering continues counter-clockwise se
 |---|---|---|
 | 1 | VBAT | battery +, also a round test pad (~4.1 V) |
 | 2 | LDOIN / PP0 | 5 V from USB-C, also on a test pad (leave it unconnected) |
-| 3 | VDDIO | ~3 V rail |
+| 3 | VDDIO | 3.3 V I/O rail (output) |
 | 11 | USB0DM (D−) | **test pad** |
 | 12 | USB0DP (D+) | **test pad** right next to the D− pad |
 | PB7, PA7, PA8, PA0, PA1, PA2, PA9 | GPIO | the 7 buttons (to GND); PA9 = button 1 / power |
@@ -99,7 +99,8 @@ The firmware is Jieli's SDK demo **`apps/hid/examples/keypage`** (a "page turner
 | 3 | Consumer control, 24 one-bit fields | long presses (volume, prev/next track, play) |
 | 4 | Keyboard (modifiers + 1 key) | never used |
 
-There is a second map for iOS hosts (mouse-based); it is not touched here.
+A second report map (keyboard, consumer and mouse collections) sits right before it, apparently for
+iOS hosts; it is not touched here.
 
 **Button scripts.** Every press plays a small *script* stored as plain data in `app.bin`
 (17 slots of 84 bytes at `app.bin+0x132E4`):
@@ -107,7 +108,8 @@ There is a second map for iOS hosts (mouse-based); it is not touched here.
 ```
 u16 slot_index, u16 step_count, then up to 10 x { u16 x, u16 y, u16 action, u16 delay_ms }
 action 0x12 = touch down/move, 0x13 = touch up (digitizer report)
-action 0x04..0x10 = set one media-key bit (report 3), 0x0C = release
+action 0x04..0x10 = set one media-key bit (report 3), except 0x0C = release all
+action 0x00..0x03 = nothing observed
 ```
 
 Slots: #0 down swipe, #1 up, #2 right, #3 left, #4 centre tap, #5 double-tap ("like"),
@@ -128,7 +130,8 @@ Long presses: left → bit 11, right → 12, centre → 14, up → 15 (repeating
    collection and replace each Usage with a keyboard usage — bits 7 & 11 → Left, 12 → Right,
    14 → Enter, 15 → Up, 16 → Down, 17 → Space, the rest → 0. Same length (80 bytes), so nothing moves.
 2. **Point the short-press scripts at those bits** (one step + release each):
-   left 0x0B, right 0x06, up 0x09, down 0x08, centre 0x04, double-centre 0x04 twice, button 2 0x10.
+   left 0x0B, right 0x06, up 0x09, down 0x08, centre 0x04, button 2 0x10. The centre double-tap
+   script (#5) becomes Enter twice.
 
 `patches/yiser_j6_keys.json` is exactly this (offsets into the decrypted `app.bin`).
 `tools/make_keys_patch.py` regenerates it. A stricter variant
@@ -142,7 +145,7 @@ The flash changes are 3 × 4 KB sectors (`0x02000`, `0x14000`, `0x15000`).
 > Measure first with `pc/remote_logger.py`: press each button a different number of times so the log
 > labels itself.
 
-## 4. Getting into the bootloader (Raspberry Pi Pico / Pico 2)
+## 4. Getting into the bootloader (Raspberry Pi Pico)
 
 ### The idea in one paragraph
 
@@ -194,6 +197,9 @@ driving them feeds a little power into the chip through the data pins and stops 
 
 ### Running it
 
+This was done with an RP2350 board (Pico 2 compatible). An original RP2040 Pico should work the same
+but wasn't tested.
+
 Battery disconnected, GP6 connected. With MicroPython on the Pico, copy the script over once
 (`pip install mpremote` if you don't have it; Thonny works too):
 
@@ -211,7 +217,11 @@ It powers the chip off and on via GP6, sends the knock for ~150 ms, releases the
 chip powered. Within a couple of seconds Windows shows **`BD19 UBOOT1.00 USB Device`**
 (USB `4C4A:3442`) as a new drive. **Never let Windows format it**: if it asks, click Cancel.
 If nothing appears, run `enter()` again. If it never appears, check the wiring.
-When you're finished, `k.power_off()` switches the chip off again.
+When you're finished, switch the chip off again with:
+
+```bash
+mpremote exec "import pico_usb_key as k; k.power_off()"
+```
 
 Technical detail: the key is sent MSB first, latched on the clock's rising edge, ~25–50 kHz. Sources
 disagree on which USB line is the clock, so the script alternates **both orders**; that works,
@@ -252,9 +262,9 @@ python tools/jl_repack.py backup1.bin <chipkey> patches/yiser_j6_keys.json patch
 ```
 
 `jl_unpack.py` lists the firmware's parts. The `app_area_head` line must end in `crc=ok`; if it says
-`crc=BAD`, the chip key is wrong. (One last line with nonsense values and `crc=BAD` is normal: it's
-just the end of the list.) `jl_repack.py` prints every change it makes and writes one file per changed 4 KB block:
-`patched.bin.sector_02000.bin`, `patched.bin.sector_14000.bin` and `patched.bin.sector_15000.bin`.
+`crc=BAD` (with a garbled name), the chip key is wrong. `jl_repack.py` prints every change it makes
+and writes one file per changed 4 KB block: `patched.bin.sector_02000.bin`,
+`patched.bin.sector_14000.bin` and `patched.bin.sector_15000.bin`.
 
 **3. Write only those three blocks** (the tool erases each block before writing it):
 
@@ -276,7 +286,7 @@ foreach ($a in "02000","14000","15000") { (Get-FileHash "patched.bin.sector_$a.b
 
 All three lines must say `True`.
 
-**5. Switch to the battery.** Run `k.power_off()`, disconnect GP6, connect the battery, then
+**5. Switch to the battery.** Run the `power_off()` command, disconnect GP6, connect the battery, then
 **hold button 1 until the remote switches on.** Once power is connected, the remote stays off
 until you do this. That cost hours here: every "dead" firmware turned out to be simply switched off.
 
@@ -300,11 +310,13 @@ python jluboottool.py --device \\.\D: "write 0x2000 orig_02000.bin" "write 0x140
   scheme: ENC per 32-byte block with key `chipkey ^ ((addr - 0x2000) >> 2)`.
 * App area = `app_area_head` (offset field = entry point `0x1E00120`) containing `app.bin`,
   `cfg_tool.bin`, `VM`, `PRCT`, `BTIF`; followed — **unaligned, as the last entry (index 1)** —
-  by `p11_code.bin` (code for the chip's low-power core, loaded at boot). Leave it out and nothing runs.
+  by `p11_code.bin` (code for the chip's low-power core, loaded by the app at boot). Easy to miss
+  because it isn't 32-byte aligned; any image you rebuild should keep it.
 * `app_area_head`'s data CRC covers everything after its header up to its `size`; the `app.bin`
   entry carries the CRC16 of `app.bin`. `jl_repack.py` recomputes all of it.
-* The bootloader (`uboot.boot`) is byte-identical to the one in Jieli's AC63 SDK
-  (`cpu/bd19/tools/uboot.boot`), and the stock `cfg_tool.bin` is the SDK default.
+* The second-stage bootloader (`uboot.boot`) is the SDK's `cpu/bd19/tools/uboot.boot`: byte-identical
+  once the ENC scrambling (key `0xFFFF`) of its 16-byte header and its body is removed. The stock
+  `cfg_tool.bin` is byte-identical to the SDK default.
 
 `tools/jl_build_image.py` drops a different `app.bin` into the original layout (as a self-test it
 rebuilt the stock firmware byte-for-byte). It was used for custom SDK builds; those ran, but were
@@ -336,8 +348,8 @@ Good to know:
 
 This took a lot of trial and error on real hardware. The main wrong turns:
 
-* **Remapping on the Kindle side.** Possible, but every button still arrived as the same touch event;
-  the clean fix was making the remote itself send keys.
+* **Remapping on the Kindle side.** Possible by translating the touch coordinates back into buttons,
+  but fragile and hacky; making the remote itself send keys was much cleaner.
 * **Testing firmware while powered from the Pico.** The firmware never showed up on Bluetooth and
   looked "broken" — it just needed the battery (see the power table above).
 * **Thinking flashed firmware was dead.** Several builds seemed not to boot; really the remote was
@@ -354,7 +366,7 @@ This took a lot of trial and error on real hardware. The main wrong turns:
 
 | File | What |
 |---|---|
-| `tools/jl_unpack.py` | decrypt + list a JLFS flash dump (header, entries, app area) |
+| `tools/jl_unpack.py` | decrypt + list a JLFS flash dump and extract its parts (`app.bin`, `p11_code.bin`, …) |
 | `tools/jl_repack.py` | apply a JSON patch to the decrypted `app.bin`, fix CRCs, re-encrypt, emit changed sectors |
 | `tools/make_keys_patch.py` | generates `patches/*.json` |
 | `tools/hid_desc_dump.py` | pretty-print HID descriptors found in `app.bin` |

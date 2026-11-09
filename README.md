@@ -7,6 +7,16 @@
 > on real hardware, and directed and checked the work. The patch has been confirmed working on one
 > remote, but treat the explanations as AI-written: they may contain mistakes.
 
+### Why this remote?
+
+There are plenty of cheap Bluetooth page turners and clickers, but most of them are bulky or
+expensive, run on disposable coin cells, have only one or two buttons, or some mix of all of these.
+The Yiser-J6 is small enough to wear on a finger, has a **rechargeable battery** (USB-C), and has
+**seven buttons**. That combination is fairly rare for a page turner. Its only real problem is
+that it doesn't send normal key presses, and this project fixes that.
+
+### The problem
+
 The **Yiser-J6** is a cheap Bluetooth "TikTok scroller" ring remote. Out of the box it
 pretends to be a **touchscreen**: every button press is sent as a finger swipe or tap,
 so on Linux (and a jailbroken Kindle running
